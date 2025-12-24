@@ -5,6 +5,30 @@ import FloatingElements from "@/components/FloatingElements";
 import WaitlistForm from "@/components/WaitlistForm";
 import { useRef, useState, useEffect } from "react";
 
+// Internal component to handle the Razorpay Script injection safely in React
+const RazorpayButton = () => {
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    // Clear previous content to prevent duplicates on re-renders
+    containerRef.current.innerHTML = "";
+
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/payment-button.js";
+    script.dataset.payment_button_id = "pl_RvNakEj20F9npr";
+    script.async = true;
+
+    const form = document.createElement("form");
+    form.appendChild(script);
+
+    containerRef.current.appendChild(form);
+  }, []);
+
+  return <div ref={containerRef} className="mt-6 flex justify-center razorpay-container" />;
+};
+
 export default function Home() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [messages, setMessages] = useState<{ role: "user" | "bot"; text: string }[]>([]);
@@ -12,8 +36,8 @@ export default function Home() {
   const [isTyping, setIsTyping] = useState(false);
   const [isLandscapeMode, setIsLandscapeMode] = useState(false);
 
-  // Total sections
-  const SECTION_COUNT = 12;
+  // Total sections: 13 (Includes the Payment slide)
+  const SECTION_COUNT = 13;
 
   const scrollToWaitlist = () => {
     if (scrollContainerRef.current) {
@@ -741,7 +765,116 @@ export default function Home() {
               </div>
             </section>
 
-            {/* Section 12: CTA / Waitlist */}
+            {/* Section 12: Razorpay Payment Page (REDESIGNED) */}
+            <section className={`${sectionWrapperClass} bg-white`}>
+              <div className={contentRotatorClass}>
+                <motion.div
+                  className={`max-w-2xl w-full ${contentPadding}`}
+                  initial={{ opacity: 0 }}
+                  whileInView={{ opacity: 1 }}
+                  transition={{ duration: 0.6, ease: "easeOut" }}
+                  viewport={{ once: true }}
+                >
+                  <div className="relative w-full text-center">
+                    
+                    {/* Header */}
+                    <div className="mb-8 sm:mb-10">
+                       <motion.h2 
+                        className="text-3xl sm:text-4xl md:text-5xl font-light tracking-tight mb-3"
+                        initial={{ opacity: 0, y: 20 }}
+                        whileInView={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2 }}
+                       >
+                         Founding Member <span className="gradient-text font-medium">Access</span>
+                       </motion.h2>
+                       <motion.div
+                         className="flex justify-center"
+                         initial={{ opacity: 0, scale: 0.9 }}
+                         whileInView={{ opacity: 1, scale: 1 }}
+                         transition={{ delay: 0.3 }}
+                       >
+                         <span className="inline-block px-3 py-1 rounded-full bg-black/5 text-[10px] sm:text-xs uppercase tracking-widest font-semibold text-black/70">
+                           Limited Time Offer
+                         </span>
+                       </motion.div>
+                    </div>
+
+                    {/* Pricing Block */}
+                    <motion.div 
+                      className="flex flex-col items-center justify-center mb-10"
+                      initial={{ opacity: 0, y: 20 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.4 }}
+                    >
+                      <div className="flex items-baseline gap-3 sm:gap-4 relative">
+                         <span className="text-lg sm:text-xl text-gray-400 font-light line-through decoration-red-400/50 decoration-1">
+                           ₹5,999
+                         </span>
+                         <span className="text-6xl sm:text-7xl md:text-8xl font-black gradient-text tracking-tighter leading-none">
+                           ₹999
+                         </span>
+                         <span className="text-lg sm:text-xl font-light text-gray-500 self-end mb-2 sm:mb-4">
+                           /month
+                         </span>
+                      </div>
+                      <p className="text-xs sm:text-sm text-green-600/80 font-medium mt-2">
+                        Save 83% • Cancel anytime
+                      </p>
+                    </motion.div>
+
+                    {/* Feature List */}
+                    <motion.div 
+                      className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 sm:gap-y-4 max-w-lg mx-auto mb-10 text-left"
+                      initial={{ opacity: 0 }}
+                      whileInView={{ opacity: 1 }}
+                      transition={{ delay: 0.5 }}
+                    >
+                       <div className="flex gap-3 items-center text-sm font-light text-gray-700">
+                         <div className="w-4 h-4 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center flex-shrink-0">
+                           <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+                         </div>
+                         Verified Doctor Badge
+                       </div>
+                       <div className="flex gap-3 items-center text-sm font-light text-gray-700">
+                         <div className="w-4 h-4 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center flex-shrink-0">
+                           <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+                         </div>
+                         Unlimited Case Discussions
+                       </div>
+                       <div className="flex gap-3 items-center text-sm font-light text-gray-700">
+                         <div className="w-4 h-4 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center flex-shrink-0">
+                           <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+                         </div>
+                         Priority Networking
+                       </div>
+                       <div className="flex gap-3 items-center text-sm font-light text-gray-700">
+                         <div className="w-4 h-4 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center flex-shrink-0">
+                           <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+                         </div>
+                         Exclusive Research Access
+                       </div>
+                    </motion.div>
+
+                    {/* Razorpay Button Wrapper */}
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      whileInView={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.6 }}
+                      className="relative z-10"
+                    >
+                      <RazorpayButton />
+                    </motion.div>
+
+                    <p className="mt-6 text-[10px] text-gray-400 text-center font-light">
+                      Secure payment via Razorpay. Encrypted & Safe.
+                    </p>
+
+                  </div>
+                </motion.div>
+              </div>
+            </section>
+
+            {/* Section 13: CTA / Waitlist */}
             <section className={sectionWrapperClass}>
               <div className={`${contentRotatorClass} items-center justify-center`}>
                 <div className="w-full h-full flex items-center justify-center">

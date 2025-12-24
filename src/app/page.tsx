@@ -2,32 +2,36 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import FloatingElements from "@/components/FloatingElements";
-import WaitlistForm from "@/components/WaitlistForm";
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, memo } from "react";
 
-// Internal component to handle the Razorpay Script injection safely in React
-const RazorpayButton = () => {
+// --- Internal Components ---
+
+// Optimized Razorpay Button to prevent re-loading/flickering on scroll
+const RazorpayButton = memo(() => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const loadedRef = useRef(false);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    // Prevent double injection if already loaded
+    if (!containerRef.current || loadedRef.current) return;
 
-    // Clear previous content to prevent duplicates on re-renders
-    containerRef.current.innerHTML = "";
-
+    const form = document.createElement("form");
+    
     const script = document.createElement("script");
     script.src = "https://checkout.razorpay.com/v1/payment-button.js";
     script.dataset.payment_button_id = "pl_RvNakEj20F9npr";
     script.async = true;
 
-    const form = document.createElement("form");
     form.appendChild(script);
-
     containerRef.current.appendChild(form);
+    
+    loadedRef.current = true;
   }, []);
 
-  return <div ref={containerRef} className="mt-6 flex justify-center razorpay-container" />;
-};
+  return <div ref={containerRef} className="mt-4 sm:mt-6 flex justify-center razorpay-container min-h-[50px] scale-110 sm:scale-100 origin-top" />;
+});
+
+RazorpayButton.displayName = "RazorpayButton";
 
 export default function Home() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -35,28 +39,45 @@ export default function Home() {
   const [inputValue, setInputValue] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const [isLandscapeMode, setIsLandscapeMode] = useState(false);
+  const [isClient, setIsClient] = useState(false);
 
-  // Total sections: 13 (Includes the Payment slide)
-  const SECTION_COUNT = 13;
+  // Ensure client-side rendering for hydration stability
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
-  const scrollToWaitlist = () => {
-    if (scrollContainerRef.current) {
-      if (isLandscapeMode) {
-        // In forced landscape, we scroll vertically (Top)
-        const maxScroll = scrollContainerRef.current.scrollHeight;
-        scrollContainerRef.current.scrollTo({ 
-          top: maxScroll, 
-          behavior: "smooth" 
-        });
-      } else {
-        // In portrait, we scroll horizontally (Left)
-        const maxScroll = scrollContainerRef.current.scrollWidth;
-        scrollContainerRef.current.scrollTo({ 
-          left: maxScroll, 
-          behavior: "smooth" 
-        });
+  // Total sections: 12
+  const SECTION_COUNT = 12;
+
+  // --- Hash Navigation Logic ---
+  useEffect(() => {
+    const handleHashScroll = () => {
+      const hash = window.location.hash.replace('#', '');
+      if (hash && scrollContainerRef.current) {
+        const element = document.getElementById(hash);
+        if (element) {
+          if (isLandscapeMode) {
+            scrollContainerRef.current.scrollTo({
+              top: element.offsetTop,
+              behavior: "smooth"
+            });
+          } else {
+            scrollContainerRef.current.scrollTo({
+              left: element.offsetLeft,
+              behavior: "smooth"
+            });
+          }
+        }
       }
-    }
+    };
+
+    setTimeout(handleHashScroll, 100);
+    window.addEventListener('hashchange', handleHashScroll);
+    return () => window.removeEventListener('hashchange', handleHashScroll);
+  }, [isLandscapeMode]);
+
+  const scrollToPayment = () => {
+    window.location.hash = "payment";
   };
 
   const toggleLandscape = () => {
@@ -71,7 +92,7 @@ export default function Home() {
     setInputValue("");
     setIsTyping(true);
 
-    const botResponse = "Ohoo it's just a demo doctor! Please sign up on the last slide to unlock the full experience.";
+    const botResponse = "Ohoo it's just a demo doctor! Please join via the last slide to unlock the full experience.";
 
     setTimeout(() => {
       setMessages(prev => [...prev, { role: "bot", text: "" }]);
@@ -95,43 +116,34 @@ export default function Home() {
     }, 800);
   };
 
-  // --- Dynamic Layout Classes ---
-
-  // Container: 
-  // Portrait -> Horizontal Scroll (overflow-x)
-  // Landscape -> Vertical Scroll (overflow-y) to match physical swipe
+  // --- Layout Classes ---
   const containerClass = isLandscapeMode
     ? "fixed inset-0 overflow-y-auto overflow-x-hidden snap-y snap-mandatory bg-white z-40 scrollbar-hide"
     : "relative w-full h-full overflow-x-auto overflow-y-hidden snap-x snap-mandatory bg-white scrollbar-hide";
 
-  // Track:
-  // Portrait -> Flex Row (Side by side)
-  // Landscape -> Flex Col (Stacked on top of each other)
   const trackStyle = isLandscapeMode
     ? { width: "100%", minHeight: "100%", display: "flex", flexDirection: "column" as const }
     : { width: `${SECTION_COUNT * 100}vw`, height: "100%", display: "flex", flexDirection: "row" as const };
 
-  // Section Outer Wrapper:
-  // Portrait -> 100vw Width
-  // Landscape -> 100vh Height (Full screen height per slide)
   const sectionWrapperClass = isLandscapeMode
     ? "w-full h-[100dvh] relative snap-center flex-shrink-0 overflow-hidden"
     : "w-screen h-full relative snap-center flex-shrink-0 overflow-hidden";
 
-  // Inner Content Rotator (Only for Landscape):
-  // This takes the vertical content and rotates it 90deg to look like landscape
-  // It swaps Width/Height dimensions (w-[100dvh] h-[100vw]) to fit the rotated view
   const contentRotatorClass = isLandscapeMode
     ? "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[100dvh] h-[100vw] rotate-90 origin-center flex items-center justify-center"
-    : "w-full h-full flex items-center justify-center"; // Normal centering for portrait
+    : "w-full h-full flex items-center justify-center";
 
-  // Padding adjustment for sections
-  // In portrait we use px-4, in rotated landscape the 'horizontal' padding becomes vertical padding relative to the screen
-  const contentPadding = isLandscapeMode ? "p-8 sm:p-12" : "px-4 sm:px-8";
+  const contentPadding = isLandscapeMode ? "p-6 sm:p-12" : "px-4 sm:px-8";
+
+  // **FIX:** Reduced top padding to pt-12 and added pb-20 to ensure bottom content is reachable
+  const scrollableContentClass = isLandscapeMode 
+    ? "h-full overflow-y-auto scrollbar-hide w-full flex flex-col items-center justify-start pt-12 pb-24" 
+    : "w-full flex flex-col items-center justify-center";
+
+  if (!isClient) return null;
 
   return (
     <>
-      {/* Outer wrapper */}
       <div className="fixed inset-0 overflow-hidden bg-white">
         
         {/* Toggle Button */}
@@ -149,14 +161,12 @@ export default function Home() {
           )}
         </motion.button>
 
-        {/* Floating Elements (Hidden in forced landscape) */}
         <div className={isLandscapeMode ? "opacity-0 pointer-events-none" : "opacity-100"}>
           <FloatingElements />
         </div>
         
-        {/* Fixed Join Button */}
         <motion.button
-          onClick={scrollToWaitlist}
+          onClick={scrollToPayment}
           className={`fixed top-4 right-4 sm:top-6 sm:right-6 z-50 text-[0.6rem] sm:text-xs font-medium tracking-widest uppercase group ${isLandscapeMode ? 'hidden' : 'block'}`}
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -172,7 +182,6 @@ export default function Home() {
           />
         </motion.button>
         
-        {/* Main Scroll Container */}
         <div 
           ref={scrollContainerRef}
           className={containerClass}
@@ -180,7 +189,7 @@ export default function Home() {
           <div style={trackStyle}>
             
             {/* Section 1: Brand Title */}
-            <section className={sectionWrapperClass}>
+            <section id="intro" className={sectionWrapperClass}>
               <div className={contentRotatorClass}>
                 <div className="text-center">
                   <motion.div
@@ -219,7 +228,7 @@ export default function Home() {
             </section>
 
             {/* Section 2: Concept Statement */}
-            <section className={sectionWrapperClass}>
+            <section id="concept" className={sectionWrapperClass}>
               <div className={`${contentRotatorClass} ${isLandscapeMode ? 'items-center justify-start' : 'items-center justify-start'} ${contentPadding}`}>
                 <div className="w-full">
                   <motion.div
@@ -254,7 +263,7 @@ export default function Home() {
             </section>
 
             {/* Section 3: Purpose Paragraph */}
-            <section className={sectionWrapperClass}>
+            <section id="purpose" className={sectionWrapperClass}>
               <div className={`${contentRotatorClass} ${isLandscapeMode ? 'items-center justify-end' : 'items-center justify-end'} ${contentPadding}`}>
                 <motion.div
                   className="max-w-md sm:max-w-lg md:max-w-xl lg:max-w-2xl text-right"
@@ -300,7 +309,7 @@ export default function Home() {
             </section>
 
             {/* Section 4: Features Statement */}
-            <section className={sectionWrapperClass}>
+            <section id="features" className={sectionWrapperClass}>
               <div className={contentRotatorClass}>
                 <motion.div
                   className={`max-w-4xl text-center w-full ${contentPadding}`}
@@ -362,7 +371,7 @@ export default function Home() {
             </section>
 
             {/* Section 5: Sample Post Mockup 1 */}
-            <section className={`${sectionWrapperClass} bg-blue-500`}>
+            <section id="post-1" className={`${sectionWrapperClass} bg-blue-500`}>
               <div className={contentRotatorClass}>
                 <motion.div
                   className={`max-w-2xl w-full ${contentPadding}`}
@@ -416,7 +425,7 @@ export default function Home() {
             </section>
 
             {/* Section 6: Sample Post Mockup 2 */}
-            <section className={`${sectionWrapperClass} bg-orange-500`}>
+            <section id="post-2" className={`${sectionWrapperClass} bg-orange-500`}>
               <div className={contentRotatorClass}>
                 <motion.div
                   className={`max-w-2xl w-full ${contentPadding}`}
@@ -470,7 +479,7 @@ export default function Home() {
             </section>
 
             {/* Section 7: Community Stats */}
-            <section className={sectionWrapperClass}>
+            <section id="stats" className={sectionWrapperClass}>
               <div className={`${contentRotatorClass} ${isLandscapeMode ? 'items-center justify-start' : 'items-center justify-start'} ${contentPadding}`}>
                 <motion.div
                   className="max-w-xl"
@@ -514,7 +523,7 @@ export default function Home() {
             </section>
 
             {/* Section 8: Interactive Demo Chat */}
-            <section className={sectionWrapperClass}>
+            <section id="demo" className={sectionWrapperClass}>
               <div className={contentRotatorClass}>
                 <motion.div
                   className={`max-w-2xl w-full ${contentPadding}`}
@@ -574,10 +583,10 @@ export default function Home() {
                             transition={{ duration: 0.5, delay: 0.3 }}
                           >
                             <button
-                              onClick={scrollToWaitlist}
+                              onClick={scrollToPayment}
                               className="text-[0.6rem] sm:text-xs font-medium tracking-widest uppercase relative group text-black/70 hover:text-black transition-colors"
                             >
-                              <span className="relative z-10">join waitlist →</span>
+                              <span className="relative z-10">join now →</span>
                               <motion.div
                                 className="absolute bottom-0 left-0 h-[1px] w-0 group-hover:w-full transition-all duration-500 gradient-underline"
                               />
@@ -639,7 +648,7 @@ export default function Home() {
             </section>
 
             {/* Section 9: Testimonial */}
-            <section className={sectionWrapperClass}>
+            <section id="testimonial" className={sectionWrapperClass}>
               <div className={`${contentRotatorClass} ${isLandscapeMode ? 'items-center justify-end' : 'items-center justify-end'} ${contentPadding}`}>
                 <motion.div
                   className="max-w-md sm:max-w-lg md:max-w-xl lg:max-w-2xl text-right"
@@ -681,7 +690,7 @@ export default function Home() {
             </section>
 
             {/* Section 10: Security Focus */}
-            <section className={sectionWrapperClass}>
+            <section id="security" className={sectionWrapperClass}>
               <div className={contentRotatorClass}>
                 <motion.div
                   className={`max-w-3xl text-center ${contentPadding}`}
@@ -716,7 +725,7 @@ export default function Home() {
             </section>
 
             {/* Section 11: Vision Statement */}
-            <section className={sectionWrapperClass}>
+            <section id="vision" className={sectionWrapperClass}>
               <div className={`${contentRotatorClass} ${isLandscapeMode ? 'items-center justify-start' : 'items-center justify-start'} ${contentPadding}`}>
                 <motion.div
                   className="max-w-3xl"
@@ -765,94 +774,100 @@ export default function Home() {
               </div>
             </section>
 
-            {/* Section 12: Razorpay Payment Page (REDESIGNED) */}
-            <section className={`${sectionWrapperClass} bg-white`}>
+            {/* Section 12: Razorpay Payment Page (FINAL PAGE) */}
+            <section id="payment" className={`${sectionWrapperClass} bg-white`}>
               <div className={contentRotatorClass}>
                 <motion.div
-                  className={`max-w-2xl w-full ${contentPadding}`}
+                  // Optimized padding and scrolling: pt-12 (less top gap), pb-24 (more bottom gap for button)
+                  className={`${contentPadding} ${scrollableContentClass}`}
                   initial={{ opacity: 0 }}
                   whileInView={{ opacity: 1 }}
                   transition={{ duration: 0.6, ease: "easeOut" }}
                   viewport={{ once: true }}
                 >
-                  <div className="relative w-full text-center">
+                  <div className="relative w-full text-center max-w-2xl">
                     
                     {/* Header */}
-                    <div className="mb-8 sm:mb-10">
-                       <motion.h2 
-                        className="text-3xl sm:text-4xl md:text-5xl font-light tracking-tight mb-3"
-                        initial={{ opacity: 0, y: 20 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.2 }}
-                       >
-                         Founding Member <span className="gradient-text font-medium">Access</span>
-                       </motion.h2>
-                       <motion.div
-                         className="flex justify-center"
-                         initial={{ opacity: 0, scale: 0.9 }}
-                         whileInView={{ opacity: 1, scale: 1 }}
+                    {/* Compact margin: mb-4 instead of mb-10 */}
+                    <div className="mb-4 sm:mb-10">
+                        <motion.div
+                          className="flex justify-center mb-2"
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          whileInView={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: 0.2 }}
+                        >
+                          <span className="inline-block px-3 py-1 rounded-full bg-black/5 text-[10px] sm:text-xs uppercase tracking-widest font-semibold text-black/70">
+                            Limited Time Offer
+                          </span>
+                        </motion.div>
+                        <motion.h2 
+                         // Smaller text on mobile landscape: text-3xl
+                         className="text-3xl sm:text-4xl md:text-5xl font-light tracking-tight"
+                         initial={{ opacity: 0, y: 20 }}
+                         whileInView={{ opacity: 1, y: 0 }}
                          transition={{ delay: 0.3 }}
-                       >
-                         <span className="inline-block px-3 py-1 rounded-full bg-black/5 text-[10px] sm:text-xs uppercase tracking-widest font-semibold text-black/70">
-                           Limited Time Offer
-                         </span>
-                       </motion.div>
+                        >
+                          Founding Member <span className="gradient-text font-medium">Access</span>
+                        </motion.h2>
                     </div>
 
                     {/* Pricing Block */}
+                    {/* Compact margin: mb-4 instead of mb-10 */}
                     <motion.div 
-                      className="flex flex-col items-center justify-center mb-10"
+                      className="flex flex-col items-center justify-center mb-4 sm:mb-10"
                       initial={{ opacity: 0, y: 20 }}
                       whileInView={{ opacity: 1, y: 0 }}
                       transition={{ delay: 0.4 }}
                     >
-                      <div className="flex items-baseline gap-3 sm:gap-4 relative">
-                         <span className="text-lg sm:text-xl text-gray-400 font-light line-through decoration-red-400/50 decoration-1">
-                           ₹5,999
-                         </span>
-                         <span className="text-6xl sm:text-7xl md:text-8xl font-black gradient-text tracking-tighter leading-none">
-                           ₹999
-                         </span>
-                         <span className="text-lg sm:text-xl font-light text-gray-500 self-end mb-2 sm:mb-4">
-                           /month
-                         </span>
+                      <div className="flex items-baseline gap-2 sm:gap-4 relative">
+                          <span className="text-base sm:text-xl text-gray-400 font-light line-through decoration-red-400/50 decoration-1">
+                            ₹5,999
+                          </span>
+                          {/* Scaled down for mobile landscape: text-5xl */}
+                          <span className="text-5xl sm:text-7xl md:text-8xl font-black gradient-text tracking-tighter leading-none">
+                            ₹999
+                          </span>
+                          <span className="text-base sm:text-xl font-light text-gray-500 self-end mb-1 sm:mb-4">
+                            /month
+                          </span>
                       </div>
-                      <p className="text-xs sm:text-sm text-green-600/80 font-medium mt-2">
+                      <p className="text-[10px] sm:text-sm text-green-600/80 font-medium mt-1">
                         Save 83% • Cancel anytime
                       </p>
                     </motion.div>
 
                     {/* Feature List */}
+                    {/* Tighter gaps */}
                     <motion.div 
-                      className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3 sm:gap-y-4 max-w-lg mx-auto mb-10 text-left"
+                      className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 sm:gap-y-4 max-w-lg mx-auto mb-6 sm:mb-10 text-left"
                       initial={{ opacity: 0 }}
                       whileInView={{ opacity: 1 }}
                       transition={{ delay: 0.5 }}
                     >
-                       <div className="flex gap-3 items-center text-sm font-light text-gray-700">
-                         <div className="w-4 h-4 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center flex-shrink-0">
-                           <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
-                         </div>
-                         Verified Doctor Badge
-                       </div>
-                       <div className="flex gap-3 items-center text-sm font-light text-gray-700">
-                         <div className="w-4 h-4 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center flex-shrink-0">
-                           <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
-                         </div>
-                         Unlimited Case Discussions
-                       </div>
-                       <div className="flex gap-3 items-center text-sm font-light text-gray-700">
-                         <div className="w-4 h-4 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center flex-shrink-0">
-                           <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
-                         </div>
-                         Priority Networking
-                       </div>
-                       <div className="flex gap-3 items-center text-sm font-light text-gray-700">
-                         <div className="w-4 h-4 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center flex-shrink-0">
-                           <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
-                         </div>
-                         Exclusive Research Access
-                       </div>
+                        <div className="flex gap-2 sm:gap-3 items-center text-xs sm:text-sm font-light text-gray-700">
+                          <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center flex-shrink-0">
+                            <svg className="w-2 h-2 sm:w-2.5 sm:h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+                          </div>
+                          Verified Doctor Badge
+                        </div>
+                        <div className="flex gap-2 sm:gap-3 items-center text-xs sm:text-sm font-light text-gray-700">
+                          <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center flex-shrink-0">
+                            <svg className="w-2 h-2 sm:w-2.5 sm:h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+                          </div>
+                          Unlimited Case Discussions
+                        </div>
+                        <div className="flex gap-2 sm:gap-3 items-center text-xs sm:text-sm font-light text-gray-700">
+                          <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center flex-shrink-0">
+                            <svg className="w-2 h-2 sm:w-2.5 sm:h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+                          </div>
+                          Priority Networking
+                        </div>
+                        <div className="flex gap-2 sm:gap-3 items-center text-xs sm:text-sm font-light text-gray-700">
+                          <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center flex-shrink-0">
+                            <svg className="w-2 h-2 sm:w-2.5 sm:h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+                          </div>
+                          Exclusive Research Access
+                        </div>
                     </motion.div>
 
                     {/* Razorpay Button Wrapper */}
@@ -865,64 +880,12 @@ export default function Home() {
                       <RazorpayButton />
                     </motion.div>
 
-                    <p className="mt-6 text-[10px] text-gray-400 text-center font-light">
+                    <p className="mt-4 sm:mt-6 text-[10px] text-gray-400 text-center font-light">
                       Secure payment via Razorpay. Encrypted & Safe.
                     </p>
 
                   </div>
                 </motion.div>
-              </div>
-            </section>
-
-            {/* Section 13: CTA / Waitlist */}
-            <section className={sectionWrapperClass}>
-              <div className={`${contentRotatorClass} items-center justify-center`}>
-                <div className="w-full h-full flex items-center justify-center">
-                  <motion.div
-                    className="text-center max-w-3xl"
-                    initial={{ opacity: 0, scale: 0.98 }}
-                    whileInView={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.5, ease: "easeOut" }}
-                    viewport={{ once: true }}
-                  >
-                    <motion.h2
-                      className="text-xl sm:text-2xl md:text-4xl lg:text-5xl xl:text-6xl font-extralight tracking-tight mb-2 sm:mb-3 md:mb-4"
-                      initial={{ opacity: 0, y: 15 }}
-                      whileInView={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.5, delay: 0.1 }}
-                      viewport={{ once: true }}
-                    >
-                      Join the{" "}
-                      <span className="font-bold gradient-text">movement</span>
-                    </motion.h2>
-                    
-                    <motion.p
-                      className="text-[0.5rem] sm:text-[0.6rem] md:text-xs uppercase tracking-[0.2em] sm:tracking-[0.3em] font-light mb-4 sm:mb-6 md:mb-8 text-black/60"
-                      initial={{ opacity: 0 }}
-                      whileInView={{ opacity: 1 }}
-                      transition={{ duration: 0.5, delay: 0.2 }}
-                      viewport={{ once: true }}
-                    >
-                      Early access opening soon
-                    </motion.p>
-                    
-                    <div className="flex justify-center px-2">
-                      <WaitlistForm />
-                    </div>
-                  </motion.div>
-                  
-                  <motion.div
-                    className="absolute bottom-4 sm:bottom-6 md:bottom-8 right-3 sm:right-4 md:right-8 text-right"
-                    initial={{ opacity: 0 }}
-                    whileInView={{ opacity: 1 }}
-                    transition={{ duration: 0.5, delay: 0.5 }}
-                    viewport={{ once: true }}
-                  >
-                    <p className="text-[0.5rem] sm:text-[0.6rem] md:text-xs font-light text-black/40 tracking-wider">
-                      After Trials © 2025
-                    </p>
-                  </motion.div>
-                </div>
               </div>
             </section>
           </div>
